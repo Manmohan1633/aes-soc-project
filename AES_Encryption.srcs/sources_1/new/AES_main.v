@@ -20,28 +20,56 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 
-module aes_main(clk,data_in,key,data_out);
-input clk;
-input [127:0] data_in,key;
-output  [127:0] data_out;
+module AES_main(
+    input clk,
+    input rst,
+    input start,
+    input [127:0] data_in,
+    input [127:0] key,
+    output reg [127:0] data_out,
+    output reg done
+);
 
-wire [127:0] key_s,key_s0,key_s1,key_s2,key_s3,key_s4,key_s5,key_s6,key_s7,key_s8,key_s9;
-wire [127:0]r_data_out,r0_data_out,r1_data_out,r2_data_out,r3_data_out,r4_data_out,r5_data_out,r6_data_out,r7_data_out,r8_data_out,r9_data_out;
+    reg [127:0] state;
+    reg [3:0] round_count;
+    reg busy;
+    
+    wire [127:0] round_key;
+    wire [127:0] round_res, last_round_res;
 
-assign r_data_out=data_in^key_s;
+    aes_key_expand key_gen(
+        .clk(clk),
+        .rst(rst),
+        .next_round(busy), 
+        .master_key(key),
+        .round_idx(round_count),
+        .round_key(round_key)
+    );
 
+    round r_inst      (.data_in(state), .key_in(round_key), .data_out(round_res));
+    last_round lr_inst(.data_in(state), .key_in(round_key), .data_out_last(last_round_res));
 
-aes_key_expand_128 a0( clk,key, key_s,key_s0,key_s1,key_s2,key_s3,key_s4,key_s5,key_s6,key_s7,key_s8,key_s9);
-round r0(clk,r_data_out,key_s0,r0_data_out);
-round r1(clk,r0_data_out,key_s1,r1_data_out);
-round r2(clk,r1_data_out,key_s2,r2_data_out);
-round r3(clk,r2_data_out,key_s3,r3_data_out);
-round r4(clk,r3_data_out,key_s4,r4_data_out);
-round r5(clk,r4_data_out,key_s5,r5_data_out);
-round r6(clk,r5_data_out,key_s6,r6_data_out);
-round r7(clk,r6_data_out,key_s7,r7_data_out);
-round r8(clk,r7_data_out,key_s8,r8_data_out);
-last_round r9(clk,r8_data_out,key_s9,r9_data_out);
-
-assign data_out=r9_data_out;
+    always @(posedge clk) begin
+        if (rst) begin
+            round_count <= 0;
+            done <= 0;
+            busy <= 0;
+            state <= 0;
+            data_out <= 0; // FIX: Initialize data_out to 0 to prevent X at start
+        end else if (start && !busy) begin
+            state <= data_in ^ key;
+            round_count <= 1;
+            busy <= 1;
+            done <= 0;
+        end else if (busy) begin
+            if (round_count < 10) begin
+                state <= round_res;
+                round_count <= round_count + 1;
+            end else if (round_count == 10) begin
+                data_out <= last_round_res;
+                done <= 1;
+                busy <= 0;
+            end
+        end
+    end
 endmodule

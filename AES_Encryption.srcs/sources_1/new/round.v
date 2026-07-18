@@ -20,15 +20,19 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 
-module round(clk,data_in,key_in,data_out);
-input clk;
-input [127:0]data_in,key_in;
-output [127:0] data_out;
+module round(
+    input [127:0] data_in,
+    input [127:0] key_in,
+    output [127:0] data_out
+);
 
-wire [127:0]sub_data_out,shift_data_out,mix_data_out; 
+    wire [127:0] sub_out, shift_out, mix_out;
 
-subbytes a1(clk,data_in,sub_data_out);
-shiftrows a2(clk,sub_data_out,shift_data_out);
-mixcolumn a3(clk,shift_data_out,mix_data_out);
-assign data_out=mix_data_out^key_in;
+    // Use these modules as purely combinatorial blocks
+    subbytes  a1 (data_in, sub_out);
+    shiftrows a2 (sub_out, shift_out);
+    mixcolumn a3 (shift_out, mix_out);
+
+    assign data_out = mix_out ^ key_in;
+
 endmodule

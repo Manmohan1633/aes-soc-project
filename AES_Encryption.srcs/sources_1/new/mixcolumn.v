@@ -20,96 +20,53 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 
-module mixcolumn(clk,data_in,data_out);
-input clk;
-input [127:0] data_in;
-output  [127:0] data_out;
+module mixcolumn(
+    input [127:0] data_in,
+    output [127:0] data_out
+);
 
-wire  [31:0] n1,n2,n3,n4;
-wire  [31:0] n_tmp_out1, n_tmp_out2, n_tmp_out3, n_tmp_out4;
-
-
-
-
-assign n1 = data_in[127:96];
-assign n2=data_in[95:64];
- assign n3=data_in[63:32];
-assign n4=data_in[31:0];
-
-mul_32 m1 (clk,n1,n_tmp_out1);
-mul_32 m2 (clk,n2,n_tmp_out2);
-mul_32 m3 (clk,n3,n_tmp_out3);
-mul_32 m4 (clk,n4,n_tmp_out4);
-
-assign data_out={n_tmp_out1,n_tmp_out2,n_tmp_out3,n_tmp_out4};
-
+    // Generate 4 columns (each 32 bits)
+    genvar i;
+    generate
+        for (i = 0; i < 4; i = i + 1) begin : col_loop
+            column_mix c_mix (
+                .col_in(data_in[i*32 + 31 : i*32]),
+                .col_out(data_out[i*32 + 31 : i*32])
+            );
+        end
+    endgenerate
 endmodule
 
-module mul_2(clk,data_in,data_out);
-input[7:0] data_in;
-input clk;
-output reg [7:0]data_out;
- 
-always@(posedge clk)
-data_out<={data_in[6:0],1'b0} ^ (8'h1b & {8{data_in[7]}});
-
-endmodule
-
-
-module mul_3(clk, data_in, data_out);
-    input clk;
-    input [7:0] data_in;
-    output [7:0] data_out;
+module column_mix(input [31:0] col_in, output [31:0] col_out);
+    wire [7:0] a = col_in[31:24];
+    wire [7:0] b = col_in[23:16];
+    wire [7:0] c = col_in[15:8];
+    wire [7:0] d = col_in[7:0];
     
-    wire [7:0] tmp_out;
-    reg [7:0] data_in_delayed; // Create a pipeline register
-
-    always @(posedge clk) begin
-        data_in_delayed <= data_in; // Delay input by 1 cycle
-    end
-
-    mul_2 m1(clk, data_in, tmp_out);
+    wire [7:0] m2a, m3b, m2b, m3c, m2c, m3d, m2d, m3a;
     
-    // XOR the delayed signals together so they match in time
-    assign data_out = tmp_out ^ data_in_delayed; 
+    // Instantiate multipliers
+    mul_2 m2_a(a, m2a); mul_3 m3_a(a, m3a);
+    mul_2 m2_b(b, m2b); mul_3 m3_b(b, m3b);
+    mul_2 m2_c(c, m2c); mul_3 m3_c(c, m3c);
+    mul_2 m2_d(d, m2d); mul_3 m3_d(d, m3d);
+    
+    // Matrix multiplication logic
+    assign col_out[31:24] = m2a ^ m3b ^ c ^ d;
+    assign col_out[23:16] = a ^ m2b ^ m3c ^ d;
+    assign col_out[15:8]  = a ^ b ^ m2c ^ m3d;
+    assign col_out[7:0]   = m3a ^ b ^ c ^ m2d;
 endmodule
 
+// --- DEFINITIONS FOR MUL_2 AND MUL_3 ---
+// These were missing from your file, causing the Vivado error.
 
+module mul_2(input [7:0] data_in, output [7:0] data_out);
+    assign data_out = {data_in[6:0], 1'b0} ^ (8'h1b & {8{data_in[7]}});
+endmodule
 
-module mul_32(clk,m_data_in,m_data_out);
-input clk;
-input [31:0]m_data_in;
-output [31:0] m_data_out;
-
-wire [7:0] tmp1,tmp2,tmp3,tmp4;
-wire [7:0] ma0,ma1,ma2,ma3;
-wire [7:0] m2_tmp_out1,m2_tmp_out2,m2_tmp_out3,m2_tmp_out4;
-wire [7:0] m3_tmp_out1,m3_tmp_out2,m3_tmp_out3,m3_tmp_out4;
-
-
-
-assign tmp1=m_data_in[31:24];
-assign tmp2=m_data_in[23:16];
-assign tmp3=m_data_in[15:8];
-assign tmp4=m_data_in[7:0];
-
-begin
-mul_2 m1 (clk,tmp1,m2_tmp_out1);
-mul_2 m2 (clk,tmp2,m2_tmp_out2);
-mul_2 m3 (clk,tmp3,m2_tmp_out3);
-mul_2 m4 (clk,tmp4,m2_tmp_out4);
-
-
-mul_3 m5( clk,tmp1,m3_tmp_out1);
-mul_3 m6( clk,tmp2,m3_tmp_out2);
-mul_3 m7( clk,tmp3,m3_tmp_out3);
-mul_3 m8( clk,tmp4,m3_tmp_out4);
-end
-
-assign ma0 = m2_tmp_out1 ^m3_tmp_out2^tmp3^tmp4;
-assign ma1 = tmp1 ^m2_tmp_out2 ^m3_tmp_out3 ^ tmp4;
-assign ma2 = tmp1^tmp2 ^ m2_tmp_out3 ^m3_tmp_out4;
-assign ma3 = m3_tmp_out1 ^tmp2^tmp3^m2_tmp_out4;
-
-assign m_data_out = {ma0,ma1,ma2,ma3};
+module mul_3(input [7:0] data_in, output [7:0] data_out);
+    wire [7:0] tmp;
+    mul_2 m1(data_in, tmp);
+    assign data_out = tmp ^ data_in;
 endmodule
