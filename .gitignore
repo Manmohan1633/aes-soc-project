@@ -1,0 +1,17 @@
+﻿*.log
+*.jou
+*.str
+*.pb
+*.wdb
+*.o
+.Xil/
+.cache/
+.hw/
+AES_Encryption.cache/
+AES_Encryption.runs/
+AES_Encryption.sim/
+AES_Encryption.ip_user_files/
+AES_Encryption.xpr
+
+*.lpr
+*.dcp
