@@ -23,27 +23,27 @@
 module Crypto_Engine_256_Top(
     input  wire clk,
     input  wire rst,
-    input  wire key_load,           // Renamed to match wrapper
-    input  wire [255:0] master_key, // Renamed to match wrapper
+    input  wire load,
+    input  wire [255:0] key,
     input  wire start,
     input  wire mode,
     input  wire [127:0] data_in,
     output wire [127:0] data_out,
     output wire done,
-    output wire key_ready,
-    output wire key_busy            // Added to match wrapper
+    output wire key_ready
 );
     
     wire [3:0] round_idx;
     wire [127:0] round_key;
+    wire key_busy;
 
     // The Shared Key Schedule (Rev 2)
     aes256_key_schedule ks_inst (
         .clk(clk),
         .rst(rst),
-        .load(key_load),            // Connected to wrapper's key_load
-        .master_key(master_key),    // Connected to wrapper's master_key
-        .busy(key_busy),            // Connected to wrapper's key_busy
+        .load(load),
+        .master_key(key),
+        .busy(key_busy),
         .ready(key_ready),
         .round_idx(round_idx),
         .mode(mode),
