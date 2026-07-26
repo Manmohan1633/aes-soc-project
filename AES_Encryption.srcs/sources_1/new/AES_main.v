@@ -27,7 +27,8 @@ module AES_main(
     input [127:0] data_in,
     input [127:0] key,
     output reg [127:0] data_out,
-    output reg done
+    output reg done,
+    output reg [127:0] final_round_key // Added comma here
 );
 
     reg [127:0] state;
@@ -37,14 +38,8 @@ module AES_main(
     wire [127:0] round_key;
     wire [127:0] round_res, last_round_res;
 
-    // --- CORRECTION BEGINS HERE ---
-    // Create look-ahead signals to synchronize key expansion with the data path
-    
-    // Trigger key generation on 'start' (to prepare Round 1 key) 
-    // and while 'busy' (to prepare keys for rounds 2 through 10)
+    // ... (keep your key_gen instantiation the same)
     wire compute_next_key = start | (busy && (round_count < 10));
-    
-    // Tell the key expander exactly which key index it needs to generate next
     wire [3:0] next_key_idx = start ? 4'd1 : (round_count + 1);
 
     aes_key_expand key_gen(
@@ -55,11 +50,20 @@ module AES_main(
         .round_idx(next_key_idx),
         .round_key(round_key)
     );
-    // --- CORRECTION ENDS HERE ---
 
     round r_inst      (.data_in(state), .key_in(round_key), .data_out(round_res));
     last_round lr_inst(.data_in(state), .key_in(round_key), .data_out_last(last_round_res));
 
+    // Capture the Round 10 key exactly when the encryption finishes
+    always @(posedge clk) begin
+        if (rst) begin
+            final_round_key <= 128'd0;
+        end else if (busy && round_count == 10) begin
+            final_round_key <= round_key;
+        end
+    end
+
+    // ... (rest of your existing always @(posedge clk) FSM remains the same)
     always @(posedge clk) begin
         if (rst) begin
             round_count <= 0;
@@ -68,7 +72,6 @@ module AES_main(
             state <= 0;
             data_out <= 0;
         end else if (start && !busy) begin
-            // Apply initial key before round 1 (AddRoundKey)
             state <= data_in ^ key;
             round_count <= 1;
             busy <= 1;

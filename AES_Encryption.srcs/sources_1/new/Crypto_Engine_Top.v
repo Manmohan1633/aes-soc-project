@@ -24,23 +24,23 @@ module Crypto_Engine_Top(
     input clk,
     input rst,
     input start,
-    input mode,                 // Selects operation: 0 for Encrypt, 1 for Decrypt
-    input [127:0] data_in,      // Input data (Plaintext or Ciphertext)
+    input mode,                 // 0: Encrypt, 1: Decrypt
+    input [127:0] data_in,      // Input data
     input [127:0] master_key,   // Used for Encryption
-    input [127:0] round10_key,  // Used for Decryption (Provided by host processor)
-    output reg [127:0] data_out,
-    output reg done
+    output [127:0] data_out,    // Combined output
+    output done                 // Combined done signal
 );
 
     // --- Internal Wires ---
     wire [127:0] enc_data_out;
     wire enc_done;
-    
     wire [127:0] dec_data_out;
     wire dec_done;
+    
+    // Bridge wire to carry the key from Encryption to Decryption
+    wire [127:0] captured_r10_key; 
 
     // --- Signal Routing ---
-    // Only trigger the requested core to save power and prevent collision
     wire start_enc = start & ~mode; 
     wire start_dec = start & mode;  
 
@@ -52,7 +52,8 @@ module Crypto_Engine_Top(
         .data_in(data_in),
         .key(master_key),
         .data_out(enc_data_out),
-        .done(enc_done)
+        .done(enc_done),
+        .final_round_key(captured_r10_key) // Correctly mapped
     );
 
     // --- Instantiate Decryption Core ---
@@ -61,21 +62,13 @@ module Crypto_Engine_Top(
         .rst(rst),
         .start(start_dec),
         .data_in(data_in),
-        .round10_key(round10_key),
+        .round10_key(captured_r10_key),    // Bridged here
         .data_out(dec_data_out),
         .done(dec_done)
     );
 
     // --- Output Multiplexer ---
-    // Combinationally select the correct outputs based on the active mode
-    always @(*) begin
-        if (mode == 1'b0) begin
-            data_out = enc_data_out;
-            done = enc_done;
-        end else begin
-            data_out = dec_data_out;
-            done = dec_done;
-        end
-    end
+    assign data_out = (mode == 1'b0) ? enc_data_out : dec_data_out;
+    assign done     = (mode == 1'b0) ? enc_done     : dec_done;
 
 endmodule
