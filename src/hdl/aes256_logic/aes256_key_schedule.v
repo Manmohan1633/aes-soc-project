@@ -20,138 +20,174 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 
-module aes256_key_schedule(
-    input  clk,
-    input  rst,
-    input  load,                 // pulse: latch master_key and begin expansion
-    input  [255:0] master_key,
-    output reg busy,             // expansion or dk-transform in progress
-    output reg ready,            // key_ram AND dk_ram both valid
-    input  [3:0] round_idx,      // 0..14
-    input  mode,                 // 0 = Encrypt (read key_ram), 1 = Decrypt (read dk_ram for 1..13)
-    output reg [127:0] round_key
+module aes256_key_schedule (
+    input  wire clk,
+    input  wire rst,
+    input  wire load,
+    input  wire [255:0] master_key,
+    output reg  busy,
+    output reg  ready,
+    input  wire [3:0] round_idx,
+    input  wire mode,
+    output reg  [127:0] round_key
 );
+
+    // ------------------------------------------------------------------
+    // Memory Arrays (Gowin will map these to SSRAM due to registered reads)
+    // ------------------------------------------------------------------
     reg [127:0] key_ram [0:14];
-    reg [127:0] dk_ram  [1:13];
+    reg [127:0] dk_ram [1:13];
 
-    reg        phase;   // 0 = expanding key_ram, 1 = building dk_ram
-    reg [3:0]  r;        // round currently being computed (2..14) during phase 0
-    reg [3:0]  dkr;       // key index (1..13) currently being transformed, phase 1
-    reg [1:0]  sc;         // column (0..3) within dkr, phase 1
-
-    //------------------------------------------------------------------
-    // Phase 0 math: forward key expansion (identical to rev 1)
-    //------------------------------------------------------------------
-    wire [31:0] a2 = key_ram[r-2][127:96];
-    wire [31:0] b2 = key_ram[r-2][95:64];
-    wire [31:0] c2 = key_ram[r-2][63:32];
-    wire [31:0] d2 = key_ram[r-2][31:0];
-    wire [31:0] d1 = key_ram[r-1][31:0];
-
-    wire [31:0] rot_d1 = {d1[23:0], d1[31:24]};
-    wire [31:0] sub_rot_d1;
-    sbox rs0(rot_d1[31:24], sub_rot_d1[31:24]);
-    sbox rs1(rot_d1[23:16], sub_rot_d1[23:16]);
-    sbox rs2(rot_d1[15:8],  sub_rot_d1[15:8]);
-    sbox rs3(rot_d1[7:0],   sub_rot_d1[7:0]);
-
-    wire [31:0] sub_d1;
-    sbox ss0(d1[31:24], sub_d1[31:24]);
-    sbox ss1(d1[23:16], sub_d1[23:16]);
-    sbox ss2(d1[15:8],  sub_d1[15:8]);
-    sbox ss3(d1[7:0],   sub_d1[7:0]);
-
-    wire [7:0] rcon_val;
-    aes_rcon_iter rcon_inst({1'b0, r[3:1]}, rcon_val); // r>>1 == r/2
-
-    wire [31:0] temp0 = r[0] ? sub_d1 : (sub_rot_d1 ^ {rcon_val, 24'b0});
-    wire [31:0] w0 = a2 ^ temp0;
-    wire [31:0] w1 = b2 ^ w0;
-    wire [31:0] w2 = c2 ^ w1;
-    wire [31:0] w3 = d2 ^ w2;
-
-    //------------------------------------------------------------------
-    // Phase 1 math: dk_i = InvMixColumns(K_i), one column at a time,
-    // via the shared multiplier verified in gf_mixcol_shared.
-    //------------------------------------------------------------------
-    wire [127:0] cur_key = key_ram[dkr];
-    wire [31:0]  cur_col = (sc == 2'd0) ? cur_key[127:96] :
-                            (sc == 2'd1) ? cur_key[95:64]  :
-                            (sc == 2'd2) ? cur_key[63:32]  :
-                                           cur_key[31:0];
-
-    wire [7:0] dk_b0, dk_b1, dk_b2, dk_b3;
-    gf_mixcol_shared dk_mix (
-        .mode(1'b1), // always inverse -- this instance only ever builds dk_ram
-        .a0(cur_col[31:24]), .a1(cur_col[23:16]), .a2(cur_col[15:8]), .a3(cur_col[7:0]),
-        .b0(dk_b0), .b1(dk_b1), .b2(dk_b2), .b3(dk_b3)
-    );
-    wire [31:0] dk_col = {dk_b0, dk_b1, dk_b2, dk_b3};
-
-    //------------------------------------------------------------------
-    // round_key read mux
-    //------------------------------------------------------------------
-    always @(*) begin
+    // Synchronous Read Port for the Serial Core (1-cycle latency)
+    always @(posedge clk) begin
         if (mode == 1'b0) begin
-            round_key = key_ram[round_idx];
+            round_key <= key_ram[round_idx];
         end else begin
             if (round_idx == 4'd0 || round_idx == 4'd14)
-                round_key = key_ram[round_idx];   // K0 / K14: no InvMixColumns applied, ever
+                round_key <= key_ram[round_idx];
             else
-                round_key = dk_ram[round_idx];    // K1..K13: transformed
+                round_key <= dk_ram[round_idx];
         end
     end
 
-    //------------------------------------------------------------------
-    // FSM
-    //------------------------------------------------------------------
-    integer i;
+    // ------------------------------------------------------------------
+    // Hardware Instantiations 
+    // ------------------------------------------------------------------
+    
+    reg [3:0] exp_round;
+    reg [127:0] prev_k1, prev_k2;
+
+    // 4x Synchronous S-Boxes for Key Expansion
+    // FIX: Driven combinationally so they are immediately available to the S-box
+    wire [7:0] sbox_in [0:3];
+    assign sbox_in[0] = (exp_round[0] == 1'b0) ? prev_k1[23:16] : prev_k1[31:24];
+    assign sbox_in[1] = (exp_round[0] == 1'b0) ? prev_k1[15:8]  : prev_k1[23:16];
+    assign sbox_in[2] = (exp_round[0] == 1'b0) ? prev_k1[7:0]   : prev_k1[15:8];
+    assign sbox_in[3] = (exp_round[0] == 1'b0) ? prev_k1[31:24] : prev_k1[7:0];
+
+    wire [7:0] sbox_out [0:3];
+    
+    sbox sb0(.clk(clk), .data(sbox_in[0]), .dout(sbox_out[0]));
+    sbox sb1(.clk(clk), .data(sbox_in[1]), .dout(sbox_out[1]));
+    sbox sb2(.clk(clk), .data(sbox_in[2]), .dout(sbox_out[2]));
+    sbox sb3(.clk(clk), .data(sbox_in[3]), .dout(sbox_out[3]));
+
+    // Combinational InvMixColumns for Phase 1 Precomputation
+    reg  [127:0] inv_mc_in;
+    wire [127:0] inv_mc_out;
+    
+    InvMixColumns imc_inst(
+        .data_in(inv_mc_in),
+        .data_out(inv_mc_out)
+    );
+
+    // ------------------------------------------------------------------
+    // FSM and Expansion Math
+    // ------------------------------------------------------------------
+    localparam ST_IDLE      = 3'd0,
+               ST_EXP_ADDR  = 3'd1,
+               ST_EXP_WRITE = 3'd2,
+               ST_PRE_READ  = 3'd3,
+               ST_PRE_WRITE = 3'd4,
+               ST_READY     = 3'd5;
+
+    reg [2:0] state;
+    reg [3:0] pre_idx;
+
+    // Hardcoded RCON table to save LUTs and avoid external dependencies
+    wire [7:0] rcon_val = (exp_round == 4'd2) ? 8'h01 :
+                          (exp_round == 4'd4) ? 8'h02 :
+                          (exp_round == 4'd6) ? 8'h04 :
+                          (exp_round == 4'd8) ? 8'h08 :
+                          (exp_round == 4'd10)? 8'h10 :
+                          (exp_round == 4'd12)? 8'h20 :
+                          (exp_round == 4'd14)? 8'h40 : 8'h00;
+
+    // AES-256 Word XOR Logic
+    wire [31:0] sub_word_out = {sbox_out[0], sbox_out[1], sbox_out[2], sbox_out[3]};
+    wire [31:0] temp_xor     = sub_word_out ^ {rcon_val, 24'h000000};
+    
+    wire [31:0] w0 = prev_k2[127:96] ^ ((exp_round[0] == 1'b0) ? temp_xor : sub_word_out);
+    wire [31:0] w1 = prev_k2[95:64]  ^ w0;
+    wire [31:0] w2 = prev_k2[63:32]  ^ w1;
+    wire [31:0] w3 = prev_k2[31:0]   ^ w2;
+    wire [127:0] next_key = {w0, w1, w2, w3};
+
     always @(posedge clk) begin
         if (rst) begin
+            state <= ST_IDLE;
             busy  <= 1'b0;
             ready <= 1'b0;
-            phase <= 1'b0;
-            r     <= 4'd0;
-            dkr   <= 4'd1;
-            sc    <= 2'd0;
-            for (i = 0; i < 15; i = i + 1) key_ram[i] <= 128'd0;
-            for (i = 1; i < 14; i = i + 1) dk_ram[i]  <= 128'd0;
-        end else if (load) begin
-            key_ram[0] <= master_key[255:128];
-            key_ram[1] <= master_key[127:0];
-            r     <= 4'd2;
-            phase <= 1'b0;
-            dkr   <= 4'd1;
-            sc    <= 2'd0;
-            busy  <= 1'b1;
-            ready <= 1'b0;
-        end else if (busy && !phase) begin
-            // Phase 0: forward expansion, same as rev 1
-            key_ram[r] <= {w0, w1, w2, w3};
-            if (r == 4'd14) begin
-                phase <= 1'b1;   // move on to the dk-transform phase
-            end else begin
-                r <= r + 4'd1;
-            end
-        end else if (busy && phase) begin
-            // Phase 1: build dk_ram, one column per cycle
-            case (sc)
-                2'd0: dk_ram[dkr][127:96] <= dk_col;
-                2'd1: dk_ram[dkr][95:64]  <= dk_col;
-                2'd2: dk_ram[dkr][63:32]  <= dk_col;
-                2'd3: dk_ram[dkr][31:0]   <= dk_col;
-            endcase
-            if (sc == 2'd3) begin
-                sc <= 2'd0;
-                if (dkr == 4'd13) begin
+        end else begin
+            case (state)
+                ST_IDLE: begin
+                    if (load) begin
+                        busy  <= 1'b1;
+                        ready <= 1'b0;
+                        key_ram[0] <= master_key[255:128];
+                        key_ram[1] <= master_key[127:0];
+                        prev_k2    <= master_key[255:128];
+                        prev_k1    <= master_key[127:0];
+                        exp_round  <= 4'd2;
+                        state      <= ST_EXP_ADDR;
+                    end
+                end
+
+                ST_EXP_ADDR: begin
+                    // Address is now driven combinationally by wires.
+                    // Just wait 1 clock edge for S-boxes to register the output.
+                    state <= ST_EXP_WRITE;
+                end
+
+                ST_EXP_WRITE: begin
+                    // Capture S-Box output and store new Key
+                    key_ram[exp_round] <= next_key;
+                    prev_k2 <= prev_k1;
+                    prev_k1 <= next_key;
+
+                    if (exp_round == 4'd14) begin
+                        pre_idx <= 4'd1;
+                        state   <= ST_PRE_READ;
+                    end else begin
+                        exp_round <= exp_round + 4'd1;
+                        state     <= ST_EXP_ADDR;
+                    end
+                end
+
+                ST_PRE_READ: begin
+                    // Read current key from RAM (1-cycle delay)
+                    inv_mc_in <= key_ram[pre_idx];
+                    state     <= ST_PRE_WRITE;
+                end
+
+                ST_PRE_WRITE: begin
+                    // Capture InvMixCol output and store in DK RAM
+                    dk_ram[pre_idx] <= inv_mc_out;
+                    if (pre_idx == 4'd13) begin
+                        state <= ST_READY;
+                    end else begin
+                        pre_idx <= pre_idx + 4'd1;
+                        state   <= ST_PRE_READ;
+                    end
+                end
+
+                ST_READY: begin
                     busy  <= 1'b0;
                     ready <= 1'b1;
-                end else begin
-                    dkr <= dkr + 4'd1;
+                    if (load) begin
+                        ready <= 1'b0;
+                        busy  <= 1'b1;
+                        key_ram[0] <= master_key[255:128];
+                        key_ram[1] <= master_key[127:0];
+                        prev_k2    <= master_key[255:128];
+                        prev_k1    <= master_key[127:0];
+                        exp_round  <= 4'd2;
+                        state      <= ST_EXP_ADDR;
+                    end
                 end
-            end else begin
-                sc <= sc + 2'd1;
-            end
+                
+                default: state <= ST_IDLE;
+            endcase
         end
     end
 endmodule
