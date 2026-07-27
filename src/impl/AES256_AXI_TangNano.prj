@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE gowin-synthesis-project>
+<Project>
+    <Version>beta</Version>
+    <Device id="GW1NSR-4C" package="QFN48P" speed="7" partNumber="GW1NSR-LV4CQN48PC7/I6"/>
+    <FileList>
+        <File path="C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\src\aes256_key_schedule.v" type="verilog"/>
+        <File path="C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\src\AES256_serial_core.v" type="verilog"/>
+        <File path="C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\src\Crypto_Engine_256_Top.v" type="verilog"/>
+        <File path="C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\src\aes_rcon_iter.v" type="verilog"/>
+        <File path="C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\src\gf_mixcol_shared.v" type="verilog"/>
+        <File path="C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\src\inv_sbox.v" type="verilog"/>
+        <File path="C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\src\sbox.v" type="verilog"/>
+        <File path="C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\src\axi_lite_aes256_wrapper.v" type="verilog"/>
+        <File path="C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\src\InvMixColumns.v" type="verilog"/>
+    </FileList>
+    <OptionList>
+        <Option type="disable_insert_pad" value="0"/>
+        <Option type="global_freq" value="50.000"/>
+        <Option type="looplimit" value="2000"/>
+        <Option type="output_file" value="C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\impl\gwsynthesis\AES256_AXI_TangNano.vg"/>
+        <Option type="print_all_synthesis_warning" value="0"/>
+        <Option type="ram_rw_check" value="0"/>
+        <Option type="vcc" value="1.2"/>
+        <Option type="verilog_language" value="verilog-2001"/>
+        <Option type="vhdl_language" value="vhdl-1993"/>
+    </OptionList>
+</Project>
