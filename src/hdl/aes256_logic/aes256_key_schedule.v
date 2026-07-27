@@ -33,10 +33,21 @@ module aes256_key_schedule (
 );
 
     // ------------------------------------------------------------------
-    // Memory Arrays (Gowin will map these to SSRAM due to registered reads)
+    // Memory Arrays
     // ------------------------------------------------------------------
     reg [127:0] key_ram [0:14];
     reg [127:0] dk_ram [1:13];
+
+    // Single Synchronous Write Port for key_ram (Forces BSRAM Inference)
+    reg [3:0]   kram_waddr;
+    reg [127:0] kram_wdata;
+    reg         kram_we;
+
+    always @(posedge clk) begin
+        if (kram_we) begin
+            key_ram[kram_waddr] <= kram_wdata;
+        end
+    end
 
     // Synchronous Read Port for the Serial Core (1-cycle latency)
     always @(posedge clk) begin
@@ -53,12 +64,9 @@ module aes256_key_schedule (
     // ------------------------------------------------------------------
     // Hardware Instantiations 
     // ------------------------------------------------------------------
-    
     reg [3:0] exp_round;
     reg [127:0] prev_k1, prev_k2;
 
-    // 4x Synchronous S-Boxes for Key Expansion
-    // FIX: Driven combinationally so they are immediately available to the S-box
     wire [7:0] sbox_in [0:3];
     assign sbox_in[0] = (exp_round[0] == 1'b0) ? prev_k1[23:16] : prev_k1[31:24];
     assign sbox_in[1] = (exp_round[0] == 1'b0) ? prev_k1[15:8]  : prev_k1[23:16];
@@ -66,16 +74,13 @@ module aes256_key_schedule (
     assign sbox_in[3] = (exp_round[0] == 1'b0) ? prev_k1[31:24] : prev_k1[7:0];
 
     wire [7:0] sbox_out [0:3];
-    
     sbox sb0(.clk(clk), .data(sbox_in[0]), .dout(sbox_out[0]));
     sbox sb1(.clk(clk), .data(sbox_in[1]), .dout(sbox_out[1]));
     sbox sb2(.clk(clk), .data(sbox_in[2]), .dout(sbox_out[2]));
     sbox sb3(.clk(clk), .data(sbox_in[3]), .dout(sbox_out[3]));
 
-    // Combinational InvMixColumns for Phase 1 Precomputation
     reg  [127:0] inv_mc_in;
     wire [127:0] inv_mc_out;
-    
     InvMixColumns imc_inst(
         .data_in(inv_mc_in),
         .data_out(inv_mc_out)
@@ -85,16 +90,17 @@ module aes256_key_schedule (
     // FSM and Expansion Math
     // ------------------------------------------------------------------
     localparam ST_IDLE      = 3'd0,
-               ST_EXP_ADDR  = 3'd1,
-               ST_EXP_WRITE = 3'd2,
-               ST_PRE_READ  = 3'd3,
-               ST_PRE_WRITE = 3'd4,
-               ST_READY     = 3'd5;
+               ST_LOAD_0    = 3'd1,
+               ST_LOAD_1    = 3'd2,
+               ST_EXP_ADDR  = 3'd3,
+               ST_EXP_WRITE = 3'd4,
+               ST_PRE_READ  = 3'd5,
+               ST_PRE_WRITE = 3'd6,
+               ST_READY     = 3'd7;
 
     reg [2:0] state;
     reg [3:0] pre_idx;
 
-    // Hardcoded RCON table to save LUTs and avoid external dependencies
     wire [7:0] rcon_val = (exp_round == 4'd2) ? 8'h01 :
                           (exp_round == 4'd4) ? 8'h02 :
                           (exp_round == 4'd6) ? 8'h04 :
@@ -103,10 +109,8 @@ module aes256_key_schedule (
                           (exp_round == 4'd12)? 8'h20 :
                           (exp_round == 4'd14)? 8'h40 : 8'h00;
 
-    // AES-256 Word XOR Logic
     wire [31:0] sub_word_out = {sbox_out[0], sbox_out[1], sbox_out[2], sbox_out[3]};
     wire [31:0] temp_xor     = sub_word_out ^ {rcon_val, 24'h000000};
-    
     wire [31:0] w0 = prev_k2[127:96] ^ ((exp_round[0] == 1'b0) ? temp_xor : sub_word_out);
     wire [31:0] w1 = prev_k2[95:64]  ^ w0;
     wire [31:0] w2 = prev_k2[63:32]  ^ w1;
@@ -118,30 +122,47 @@ module aes256_key_schedule (
             state <= ST_IDLE;
             busy  <= 1'b0;
             ready <= 1'b0;
+            kram_we <= 1'b0;
         end else begin
             case (state)
                 ST_IDLE: begin
+                    kram_we <= 1'b0;
                     if (load) begin
                         busy  <= 1'b1;
                         ready <= 1'b0;
-                        key_ram[0] <= master_key[255:128];
-                        key_ram[1] <= master_key[127:0];
                         prev_k2    <= master_key[255:128];
                         prev_k1    <= master_key[127:0];
                         exp_round  <= 4'd2;
-                        state      <= ST_EXP_ADDR;
+                        
+                        kram_waddr <= 4'd0;
+                        kram_wdata <= master_key[255:128];
+                        kram_we    <= 1'b1;
+                        state      <= ST_LOAD_0;
                     end
                 end
 
+                ST_LOAD_0: begin
+                    kram_waddr <= 4'd1;
+                    kram_wdata <= master_key[127:0];
+                    kram_we    <= 1'b1;
+                    state      <= ST_LOAD_1;
+                end
+
+                ST_LOAD_1: begin
+                    kram_we <= 1'b0;
+                    state   <= ST_EXP_ADDR;
+                end
+
                 ST_EXP_ADDR: begin
-                    // Address is now driven combinationally by wires.
-                    // Just wait 1 clock edge for S-boxes to register the output.
-                    state <= ST_EXP_WRITE;
+                    kram_we <= 1'b0;
+                    state   <= ST_EXP_WRITE;
                 end
 
                 ST_EXP_WRITE: begin
-                    // Capture S-Box output and store new Key
-                    key_ram[exp_round] <= next_key;
+                    kram_waddr <= exp_round;
+                    kram_wdata <= next_key;
+                    kram_we    <= 1'b1;
+                    
                     prev_k2 <= prev_k1;
                     prev_k1 <= next_key;
 
@@ -155,13 +176,12 @@ module aes256_key_schedule (
                 end
 
                 ST_PRE_READ: begin
-                    // Read current key from RAM (1-cycle delay)
+                    kram_we   <= 1'b0;
                     inv_mc_in <= key_ram[pre_idx];
                     state     <= ST_PRE_WRITE;
                 end
 
                 ST_PRE_WRITE: begin
-                    // Capture InvMixCol output and store in DK RAM
                     dk_ram[pre_idx] <= inv_mc_out;
                     if (pre_idx == 4'd13) begin
                         state <= ST_READY;
@@ -177,12 +197,14 @@ module aes256_key_schedule (
                     if (load) begin
                         ready <= 1'b0;
                         busy  <= 1'b1;
-                        key_ram[0] <= master_key[255:128];
-                        key_ram[1] <= master_key[127:0];
                         prev_k2    <= master_key[255:128];
                         prev_k1    <= master_key[127:0];
                         exp_round  <= 4'd2;
-                        state      <= ST_EXP_ADDR;
+                        
+                        kram_waddr <= 4'd0;
+                        kram_wdata <= master_key[255:128];
+                        kram_we    <= 1'b1;
+                        state      <= ST_LOAD_0;
                     end
                 end
                 
