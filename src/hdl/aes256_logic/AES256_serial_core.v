@@ -119,9 +119,9 @@ module AES256_serial_core(
         end else begin
             case (stage)
                 ST_IDLE: begin
-                    done <= 1'b0;
                     if (start && key_ready && !busy) begin
                         busy      <= 1'b1;
+                        done      <= 1'b0;
                         round_num <= 4'd1;
                         stage     <= ST_INIT_ADDR;
                     end
