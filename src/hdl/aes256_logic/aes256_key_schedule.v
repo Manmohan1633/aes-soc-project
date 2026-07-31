@@ -33,32 +33,38 @@ module aes256_key_schedule (
 );
 
     // ------------------------------------------------------------------
-    // Memory Arrays
+    // Memory Array (unified: forward keys at 0-14, decrypt-side keys at 16-30)
     // ------------------------------------------------------------------
-    reg [127:0] key_ram [0:14];
-    reg [127:0] dk_ram [1:13];
+   
+   // The pragma forces Gowin to map this to physical BSRAM blocks
+    reg [127:0] unified_key_ram [0:31] /* synthesis syn_ramstyle = "block_ram" */;
 
-    // Single Synchronous Write Port for key_ram (Forces BSRAM Inference)
-    reg [3:0]   kram_waddr;
+    reg [4:0]   kram_waddr;
     reg [127:0] kram_wdata;
     reg         kram_we;
 
+    wire [4:0] read_addr = mode ? (5'd16 + {1'b0, round_idx}) : {1'b0, round_idx};
+
+    // Port A: Dedicated Synchronous Write
     always @(posedge clk) begin
         if (kram_we) begin
-            key_ram[kram_waddr] <= kram_wdata;
+            unified_key_ram[kram_waddr] <= kram_wdata;
         end
     end
 
-    // Synchronous Read Port for the Serial Core (1-cycle latency)
+    // Port B: Dedicated Synchronous Read
     always @(posedge clk) begin
-        if (mode == 1'b0) begin
-            round_key <= key_ram[round_idx];
-        end else begin
-            if (round_idx == 4'd0 || round_idx == 4'd14)
-                round_key <= key_ram[round_idx];
-            else
-                round_key <= dk_ram[round_idx];
-        end
+        round_key <= unified_key_ram[read_addr];
+    end
+
+    // Synchronous Read Port for the Serial Core (1-cycle latency).
+    // mode=0: read forward table directly at round_idx (0-14).
+    // mode=1: read the decrypt-side region at 16+round_idx (16-30) -- this
+    // already contains the right value whether round_idx is 0, 14, or 1-13,
+    // no special-casing needed here anymore.
+    wire [4:0] read_addr = mode ? (5'd16 + {1'b0, round_idx}) : {1'b0, round_idx};
+    always @(posedge clk) begin
+        round_key <= unified_key_ram[read_addr];
     end
 
     // ------------------------------------------------------------------
@@ -134,7 +140,7 @@ module aes256_key_schedule (
                         prev_k1    <= master_key[127:0];
                         exp_round  <= 4'd2;
                         
-                        kram_waddr <= 4'd0;
+                        kram_waddr <= 5'd0;
                         kram_wdata <= master_key[255:128];
                         kram_we    <= 1'b1;
                         state      <= ST_LOAD_0;
@@ -142,7 +148,7 @@ module aes256_key_schedule (
                 end
 
                 ST_LOAD_0: begin
-                    kram_waddr <= 4'd1;
+                    kram_waddr <= 5'd1;
                     kram_wdata <= master_key[127:0];
                     kram_we    <= 1'b1;
                     state      <= ST_LOAD_1;
@@ -159,7 +165,7 @@ module aes256_key_schedule (
                 end
 
                 ST_EXP_WRITE: begin
-                    kram_waddr <= exp_round;
+                    kram_waddr <= {1'b0, exp_round};
                     kram_wdata <= next_key;
                     kram_we    <= 1'b1;
                     
@@ -167,7 +173,7 @@ module aes256_key_schedule (
                     prev_k1 <= next_key;
 
                     if (exp_round == 4'd14) begin
-                        pre_idx <= 4'd1;
+                        pre_idx <= 4'd0; // now starts at 0, not 1 -- covers K0 and K14 too
                         state   <= ST_PRE_READ;
                     end else begin
                         exp_round <= exp_round + 4'd1;
@@ -175,15 +181,23 @@ module aes256_key_schedule (
                     end
                 end
 
+                // pre_idx sweeps 0..14 over the just-completed forward table
+                // (addresses 0-14) and stages each one for ST_PRE_WRITE.
                 ST_PRE_READ: begin
                     kram_we   <= 1'b0;
-                    inv_mc_in <= key_ram[pre_idx];
+                    inv_mc_in <= unified_key_ram[pre_idx];
                     state     <= ST_PRE_WRITE;
                 end
 
+                // K0 and K14 (pre_idx 0 and 14) are copied through unchanged
+                // -- AES never applies InvMixColumns to those two. Everything
+                // else (pre_idx 1-13) gets the transform. Destination is
+                // always 16+pre_idx, landing in the 16-30 region.
                 ST_PRE_WRITE: begin
-                    dk_ram[pre_idx] <= inv_mc_out;
-                    if (pre_idx == 4'd13) begin
+                    kram_waddr <= 5'd16 + {1'b0, pre_idx};
+                    kram_wdata <= (pre_idx == 4'd0 || pre_idx == 4'd14) ? inv_mc_in : inv_mc_out;
+                    kram_we    <= 1'b1;
+                    if (pre_idx == 4'd14) begin
                         state <= ST_READY;
                     end else begin
                         pre_idx <= pre_idx + 4'd1;
@@ -194,6 +208,7 @@ module aes256_key_schedule (
                 ST_READY: begin
                     busy  <= 1'b0;
                     ready <= 1'b1;
+                    kram_we <= 1'b0;
                     if (load) begin
                         ready <= 1'b0;
                         busy  <= 1'b1;
@@ -201,7 +216,7 @@ module aes256_key_schedule (
                         prev_k1    <= master_key[127:0];
                         exp_round  <= 4'd2;
                         
-                        kram_waddr <= 4'd0;
+                        kram_waddr <= 5'd0;
                         kram_wdata <= master_key[255:128];
                         kram_we    <= 1'b1;
                         state      <= ST_LOAD_0;

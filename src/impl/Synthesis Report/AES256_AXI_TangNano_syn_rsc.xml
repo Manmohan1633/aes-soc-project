@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Module name="soc_top" T_Register="1262(0)" T_Lut="3397(0)" T_Bsram="10(0)">
+ <SubModule name="mcu_inst" Register="15" Lut="24" Bsram="2" T_Register="15(15)" T_Lut="24(24)" T_Bsram="2(2)"/>
+ <SubModule name="aes_hw" Register="397" Lut="129" T_Register="1247(397)" T_Lut="3373(129)" T_Bsram="8(0)">
+  <SubModule name="core" T_Register="850(0)" T_Lut="3244(0)" T_Bsram="8(0)">
+   <SubModule name="ks_inst" Register="403" Lut="1426" Bsram="8" T_Register="435(403)" T_Lut="1938(1426)" T_Bsram="8(8)">
+    <SubModule name="sb0" Register="8" Lut="128" T_Register="8(8)" T_Lut="128(128)"/>
+    <SubModule name="sb1" Register="8" Lut="128" T_Register="8(8)" T_Lut="128(128)"/>
+    <SubModule name="sb2" Register="8" Lut="128" T_Register="8(8)" T_Lut="128(128)"/>
+    <SubModule name="sb3" Register="8" Lut="128" T_Register="8(8)" T_Lut="128(128)"/>
+   </SubModule>
+   <SubModule name="core_inst" Register="399" Lut="1050" T_Register="415(399)" T_Lut="1306(1050)">
+    <SubModule name="sb_fwd" Register="8" Lut="128" T_Register="8(8)" T_Lut="128(128)"/>
+    <SubModule name="sb_inv" Register="8" Lut="128" T_Register="8(8)" T_Lut="128(128)"/>
+   </SubModule>
+  </SubModule>
+ </SubModule>
+</Module>

@@ -7,12 +7,13 @@
         <File path="C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\src\aes256_key_schedule.v" type="verilog"/>
         <File path="C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\src\AES256_serial_core.v" type="verilog"/>
         <File path="C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\src\Crypto_Engine_256_Top.v" type="verilog"/>
-        <File path="C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\src\aes_rcon_iter.v" type="verilog"/>
         <File path="C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\src\gf_mixcol_shared.v" type="verilog"/>
         <File path="C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\src\inv_sbox.v" type="verilog"/>
-        <File path="C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\src\sbox.v" type="verilog"/>
-        <File path="C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\src\axi_lite_aes256_wrapper.v" type="verilog"/>
         <File path="C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\src\InvMixColumns.v" type="verilog"/>
+        <File path="C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\src\sbox.v" type="verilog"/>
+        <File path="C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\src\ahb_lite_aes256_wrapper.v" type="verilog"/>
+        <File path="C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\src\soc_top.v" type="verilog"/>
+        <File path="C:\Users\manmo\AES_Encryption\src\hdl\wrapper\gowin_empu\Gowin_EMPU_Top.v" type="verilog"/>
     </FileList>
     <OptionList>
         <Option type="disable_insert_pad" value="0"/>

@@ -1,0 +1,16 @@
+-d C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\impl\gwsynthesis\AES256_AXI_TangNano.vg
+-p GW1NSR-4C-QFN48P-7
+-pn GW1NSR-LV4CQN48PC7/I6
+-cst C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\src\tangnano4k.cst
+-cfg C:\Gowin\Gowin_V1.9.12.02_SP2_x64\IDE\bin\Documents\AES256_AXI_TangNano\impl\pnr\device.cfg
+-bit
+-tr
+-ph
+-timing
+-cst_error
+-place_option 0
+-route_option 0
+-clock_route_order 0
+-correct_hold 1
+-route_maxfan 23
+-global_freq 50.000

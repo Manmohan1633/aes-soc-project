@@ -1,0 +1,14 @@
+// Tang Nano 4K 27MHz Onboard Oscillator
+IO_LOC "clk" 45;
+IO_PORT "clk" PULL_MODE=UP;
+
+// Tang Nano 4K User Button (S1) for Reset
+IO_LOC "rst_n" 15;
+IO_PORT "rst_n" PULL_MODE=UP;
+
+// UART Pins (Wire your USB-to-TTL adapter to these headers)
+IO_LOC "uart_rx_pin" 30; 
+IO_PORT "uart_rx_pin" IO_TYPE=LVCMOS33 PULL_MODE=UP;
+
+IO_LOC "uart_tx_pin" 31;
+IO_PORT "uart_tx_pin" IO_TYPE=LVCMOS33 PULL_MODE=UP;
